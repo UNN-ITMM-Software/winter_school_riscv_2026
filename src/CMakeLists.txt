@@ -2,6 +2,7 @@
 set(KMEANS_SOURCES # m.b. will be better use GLOB ...
     base_kmeans.cpp
     student1_kmeans.cpp
+    kmeans_uchar.cpp
 )
 
 

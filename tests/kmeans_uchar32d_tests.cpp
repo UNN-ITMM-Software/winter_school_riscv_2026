@@ -41,7 +41,7 @@ std::ostream& operator<<(std::ostream& out, const KMeansUniversalParams& params)
     return out;
 }
 
-class SyntheticTestKMeansStudent1 : public testing::TestWithParam<KMeansUniversalParams> {
+class SyntheticTestKMeansStudent2_u8c32 : public testing::TestWithParam<KMeansUniversalParams> {
 protected:
     void run(const KMeansUniversalParams& params);
 };
@@ -50,7 +50,7 @@ template <typename Type>
 static inline bool checkDiff(const Type* actual, const Type* ref, const int size, float tolerance, const std::string string) {
     for (int i = 0; i < size; i++) {
         float diff = std::abs(actual[i] - ref[i]);
-        if ((diff > tolerance)) {
+        if (diff > tolerance) {
             std::cout << "[   ERROR  ] reference = " << ref[i] << ", actual = " << actual[i] << ", diff = " << diff << ", idx = " << i << std::endl;
             return false;
         }
@@ -60,26 +60,27 @@ static inline bool checkDiff(const Type* actual, const Type* ref, const int size
     return true;
 }
 
-void SyntheticTestKMeansStudent1::run(const KMeansUniversalParams& params) {
+void SyntheticTestKMeansStudent2_u8c32::run(const KMeansUniversalParams& params) {
     std::cout << "[   INFO   ] " << params << std::endl;
     const auto perf = params.isPerf;
     const auto attempts = params.attempts;
     const auto pointsCount = params.pointsCount;
     const auto clustersCount = std::min(pointsCount, params.clustersCount);
 
-    const int minValue = -1000;
-    const int maxValue = 1000;
+    const int minValue = 0;
+    const int maxValue = 128;
+    const int dimsNum = 32;
 
-    Mat points(pointsCount, 1, CV_32FC4);
+    Mat points(pointsCount, dimsNum, CV_32F);
+    Mat pointsU8(pointsCount, dimsNum, CV_8U);
+    
 
-    // will generate random (synthetic) data for the test
-    const int dimsNum = 4;
     RNG rng(2026);
 
     cv::Mat initialCenters(clustersCount, dimsNum, CV_32F);
     rng.fill(initialCenters, cv::RNG::UNIFORM, cv::Scalar(minValue), cv::Scalar(maxValue));
 
-    // Distributing the points into clusters
+
     int pointsPerCluster = pointsCount / clustersCount;
     int remainder = pointsCount % clustersCount;
 
@@ -88,21 +89,33 @@ void SyntheticTestKMeansStudent1::run(const KMeansUniversalParams& params) {
         int clusterPoints = pointsPerCluster + (clusterIdx < remainder ? 1 : 0);
         
         for (int i = 0; i < clusterPoints; i++) {
-            // For each measurement, we add noise
-            cv::Vec4f point;
+
             for (int d = 0; d < dimsNum; d++) {
-                float centerVal = initialCenters.at<float>(clusterIdx, d);
-                // Adding Gaussian noise with sigma = 5% of the range
-                float noise = rng.gaussian((maxValue - minValue) * 0.05);
-                point[d] = centerVal + noise;
+                const float centerVal = initialCenters.at<float>(clusterIdx, d);
+
+                const float noise = rng.gaussian((maxValue - minValue) * 0.05);
+                const float roundPoint = std::max(std::min(std::round(centerVal + noise), 255.f), 0.f);
+                points.at<float>(pointIdx, d) = roundPoint;
+                pointsU8.at<unsigned char>(pointIdx, d) = static_cast<unsigned char>(roundPoint);
             }
-            
-            // For CV_32FC4, we write it as Vec4f
-            points.at<cv::Vec4f>(pointIdx, 0) = point;
             pointIdx++;
         }
     }
-    cv::randShuffle(points);
+    
+    // Перемешиваем точки
+    cv::Mat indices(pointsCount, 1, CV_32S);
+    for (int i = 0; i < pointsCount; i++) indices.at<int>(i) = i;
+    cv::randShuffle(indices);
+    
+    cv::Mat pointsShuffled(pointsCount, dimsNum, CV_32F);
+    cv::Mat pointsU8Shuffled(pointsCount, dimsNum, CV_8U);
+    
+    for (int i = 0; i < pointsCount; i++) {
+        int srcIdx = indices.at<int>(i);
+        points.row(srcIdx).copyTo(pointsShuffled.row(i));
+        pointsU8.row(srcIdx).copyTo(pointsU8Shuffled.row(i));
+    }
+
     cv::TermCriteria criteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 100, 1);
 
     Mat labelsRef, centersRef, labels, centers;
@@ -111,69 +124,81 @@ void SyntheticTestKMeansStudent1::run(const KMeansUniversalParams& params) {
     if (params.isKMeansPlusPlus) {
         flags = cv::KMEANS_PP_CENTERS;
     }
+    
     setRNGSeed(2026);
-    double compactnessRef  = kmeans_base(points, clustersCount, labelsRef, 
-                                         criteria, attempts, flags, centersRef);
+    double compactnessRef = kmeans_base(pointsShuffled, clustersCount, labelsRef, 
+                                        criteria, attempts, flags, centersRef);
+    
     setRNGSeed(2026);
-    double compactnessStud = student1_kmeans(points, clustersCount, labels, 
-                                            criteria, attempts, flags, centers);
+    double compactnessStud = kmeans_uchar(pointsU8Shuffled, clustersCount, labels, 
+                                          criteria, attempts, flags, centers);
     
     std::cout << "compactnessRef: " << compactnessRef << std::endl;
     std::cout << "compactnessStud: " << compactnessStud << std::endl;
-    ASSERT_TRUE(checkDiff<float>(centers.ptr<float>(0), centersRef.ptr<float>(0), clustersCount * dimsNum, 0.f, "centers"));
-    ASSERT_TRUE(checkDiff<int32_t>(labels.ptr<int32_t>(0), labelsRef.ptr<int32_t>(0), pointsCount, 0.f, "lables"));
+    
+    ASSERT_TRUE(checkDiff(centers.ptr<float>(0), centersRef.ptr<float>(0), 
+                          clustersCount * dimsNum, 1.0f, "centers"));
+    ASSERT_TRUE(checkDiff(labels.ptr<int32_t>(0), labelsRef.ptr<int32_t>(0), 
+                          pointsCount, 0.f, "labels"));
 
-    // Check that results are reasonable (within 5% of each other)
     EXPECT_NEAR(compactnessStud, compactnessRef, compactnessRef * 0.05);
 
-    // Performance testing
     if (perf) {
-
         auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < PERF_ITERATIONS; ++i) {
-            student1_kmeans(points, clustersCount, labels, 
+            kmeans_uchar(pointsU8Shuffled, clustersCount, labels, 
                            criteria, attempts, flags, centers);
         }
 
         auto end = std::chrono::high_resolution_clock::now();
         const auto duration_st = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "Student1 kmeans took " << duration_st.count() / PERF_ITERATIONS << " ms " << std::endl;
+        std::cout << "Student2 kmeans (32D) took " << duration_st.count() / PERF_ITERATIONS << " ms " << std::endl;
 
         start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < PERF_ITERATIONS; ++i) {
-            kmeans_base(points, clustersCount, labels, 
+            kmeans_base(pointsShuffled, clustersCount, labels, 
                         criteria, attempts, flags, centers);
         }
 
         end = std::chrono::high_resolution_clock::now();
         const auto duration_cv = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "OpenCV kmeans took " << duration_cv.count() / PERF_ITERATIONS << " ms " << std::endl;
+        std::cout << "OpenCV kmeans (32D) took " << duration_cv.count() / PERF_ITERATIONS << " ms " << std::endl;
 
-        const auto st1_ms =  duration_st.count() / PERF_ITERATIONS;
+        const auto st2_ms =  duration_st.count() / PERF_ITERATIONS;
         const auto cv_ms = duration_cv.count() / PERF_ITERATIONS;
-        const double speedup = static_cast<double>(cv_ms) / static_cast<double>(st1_ms);
+        const double speedup = static_cast<double>(cv_ms) / static_cast<double>(st2_ms);
 
-        std::cout << "Speedup (CV vs Student1) = " << speedup << std::endl;
+        std::cout << "Speedup (CV vs Student2) = " << speedup << std::endl;
     }
 }
 
-TEST_P(SyntheticTestKMeansStudent1, Basic) {
+TEST_P(SyntheticTestKMeansStudent2_u8c32, Basic) {
     const KMeansUniversalParams params = GetParam();
     run(params);
 }
 
-static std::vector<KMeansUniversalParams> synthetic_data_kmeans_student1 = {
-    { ClustersCount{ 4 }, PointsCount{ 1000 }, Attempts{ 3 }, 
+
+static std::vector<KMeansUniversalParams> synthetic_data_kmeans_student2_u8c32 = {
+    { ClustersCount{ 5 }, PointsCount{ 1000 }, Attempts{ 3 }, 
       Perf{ false }, IsKMeansPlusPlus{ false } },
+    { ClustersCount{ 10 }, PointsCount{ 5000 }, Attempts{ 3 }, 
+      Perf{ false }, IsKMeansPlusPlus{ false } },
+    { ClustersCount{ 3 }, PointsCount{ 500 }, Attempts{ 5 }, 
+      Perf{ false }, IsKMeansPlusPlus{ true } },
 };
 
-static std::vector<KMeansUniversalParams> synthetic_data_kmeans_student1_perf = {
-    { ClustersCount{ 4 }, PointsCount{ 2000 }, Attempts{ 5 }, 
+
+static std::vector<KMeansUniversalParams> synthetic_data_kmeans_student2_u8c32_perf = {
+    { ClustersCount{ 5 }, PointsCount{ 20000 }, Attempts{ 5 }, 
+      Perf{ true }, IsKMeansPlusPlus{ false } },
+    { ClustersCount{ 10 }, PointsCount{ 50000 }, Attempts{ 3 }, 
+      Perf{ true }, IsKMeansPlusPlus{ false } },
+    { ClustersCount{ 15 }, PointsCount{ 100000 }, Attempts{ 2 }, 
       Perf{ true }, IsKMeansPlusPlus{ false } },
 };
 
-INSTANTIATE_TEST_SUITE_P(Accuracy, SyntheticTestKMeansStudent1, 
-                         testing::ValuesIn(synthetic_data_kmeans_student1));
-INSTANTIATE_TEST_SUITE_P(Performance, SyntheticTestKMeansStudent1, 
-                         testing::ValuesIn(synthetic_data_kmeans_student1_perf));
+INSTANTIATE_TEST_SUITE_P(Accuracy, SyntheticTestKMeansStudent2_u8c32, 
+                         testing::ValuesIn(synthetic_data_kmeans_student2_u8c32));
+INSTANTIATE_TEST_SUITE_P(Performance, SyntheticTestKMeansStudent2_u8c32, 
+                         testing::ValuesIn(synthetic_data_kmeans_student2_u8c32_perf));
 } // namespace
