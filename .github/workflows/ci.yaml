@@ -15,11 +15,12 @@ jobs:
 
     - name: Build
       run: |
-        mkdir build && cd build
-        cmake .. \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DENABLE_RVV=ON \
-          -DCMAKE_C_COMPILER=/opt/riscv/bin/riscv64-unknown-linux-gnu-gcc \
-          -DCMAKE_CXX_COMPILER=/opt/riscv/bin/riscv64-unknown-linux-gnu-g++
-        make -j$(nproc --all)
+        sudo apt-cache search opencv
+        # mkdir build && cd build
+        # cmake .. \
+        #   -DCMAKE_BUILD_TYPE=Release \
+        #   -DENABLE_RVV=ON \
+        #   -DCMAKE_C_COMPILER=/opt/riscv/bin/riscv64-unknown-linux-gnu-gcc \
+        #   -DCMAKE_CXX_COMPILER=/opt/riscv/bin/riscv64-unknown-linux-gnu-g++
+        # make -j$(nproc --all)
           
