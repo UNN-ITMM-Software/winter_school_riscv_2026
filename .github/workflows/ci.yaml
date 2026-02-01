@@ -15,7 +15,7 @@ jobs:
 
     - name: Download OpenCV
       run: |
-        python3 -m pip install gdown
+        pip install gdown
         gdown https://drive.google.com/uc?id=1IKJsyGlUu5VLnMNglAflCk9iIkr9i7h0
         tar -xf opencv.tar.gz
         ls
