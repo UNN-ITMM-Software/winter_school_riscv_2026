@@ -31,8 +31,6 @@ jobs:
           -DCMAKE_CXX_COMPILER=/opt/riscv/bin/riscv64-unknown-linux-gnu-g++
         make -j$(nproc --all)
 
-    - name: Upload binaries
-      uses: actions/upload-artifact@v4
-      with:
-        name: build
-        path: build          
+    - name: Run tests
+      run: |
+        ./build/tests/kmeans_tests
