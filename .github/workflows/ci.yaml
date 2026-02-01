@@ -18,14 +18,14 @@ jobs:
         wget -q -O opencv.tar.gz https://drive.usercontent.google.com/download?id=1IKJsyGlUu5VLnMNglAflCk9iIkr9i7h0&export=download
         sleep 5
         tar -xf opencv.tar.gz
-        ls
+        mv install ../opencv_install
  
     - name: Build
       run: |
         mkdir build && cd build
         cmake .. \
           -DCMAKE_BUILD_TYPE=Release \
-          -DOpenCV_DIR=../install
+          -DOpenCV_DIR=../../opencv_install \
           -DENABLE_RVV=ON \
           -DCMAKE_C_COMPILER=/opt/riscv/bin/riscv64-unknown-linux-gnu-gcc \
           -DCMAKE_CXX_COMPILER=/opt/riscv/bin/riscv64-unknown-linux-gnu-g++
