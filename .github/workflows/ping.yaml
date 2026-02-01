@@ -1,0 +1,14 @@
+name: Ping board to prevent power saving shutdown
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'
+  pull_request:
+
+jobs:
+  ping:
+    runs-on: self-hosted
+    steps:
+    - name: ping
+      run: |
+        echo 1
