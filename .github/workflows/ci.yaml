@@ -16,6 +16,7 @@ jobs:
     - name: Download OpenCV
       run: |
         wget -q -O opencv.tar.gz https://drive.usercontent.google.com/download?id=1IKJsyGlUu5VLnMNglAflCk9iIkr9i7h0&export=download
+        sleep 5
         tar -xf opencv.tar.gz
         ls
  
