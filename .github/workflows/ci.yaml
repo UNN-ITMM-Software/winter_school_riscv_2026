@@ -13,12 +13,12 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Download OpenCV
-      run: |
-        wget -q -O opencv.tar.gz https://drive.usercontent.google.com/download?id=1IKJsyGlUu5VLnMNglAflCk9iIkr9i7h0&export=download
-        sleep 5
-        tar -xf opencv.tar.gz
-        mv install /home/dkurt/opencv_install
+    # - name: Download OpenCV
+    #   run: |
+    #     wget -q -O opencv.tar.gz https://drive.usercontent.google.com/download?id=1IKJsyGlUu5VLnMNglAflCk9iIkr9i7h0&export=download
+    #     sleep 5
+    #     tar -xf opencv.tar.gz
+    #     mv install /home/dkurt/opencv_install
  
     - name: Build
       run: |
@@ -30,4 +30,9 @@ jobs:
           -DCMAKE_C_COMPILER=/opt/riscv/bin/riscv64-unknown-linux-gnu-gcc \
           -DCMAKE_CXX_COMPILER=/opt/riscv/bin/riscv64-unknown-linux-gnu-g++
         make -j$(nproc --all)
-          
+
+    - name: Upload binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: build
+        path: build          
